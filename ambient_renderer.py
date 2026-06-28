@@ -90,7 +90,8 @@ def biquad_bandpass(sample: np.ndarray, sample_rate: int = 44_100,
     return out
 
 def pulse_train(grain, rate, duration, sample_rate=44_100, jitter=0.0) -> np.ndarray:
-    out=np.zeros(int(duration*sample_rate)); step=sample_rate/rate; pos=0.0
+    out=np.zeros(int(duration*sample_rate))
+    step=sample_rate/rate; pos=0.0
     while int(pos)<len(out):
         p=int(pos); end=min(p+len(grain),len(out))
         out[p:end]+=grain[:end-p]
@@ -168,7 +169,7 @@ def bird_call(sample_rate: int = 44_100, freq_lo: float = 1800, freq_hi: float =
 
     return np.concatenate(pieces) # <--- concatenate all the clip into one track
 
-def birds_track(duration: float, sample_rate: int = 44_100, density: float = 0.5, gain: float = 1) -> np.ndarray:
+def birds_track(duration: float, sample_rate: int = 44_100, density: float = 0.8, gain: float = 1) -> np.ndarray:
     total_samples = int(duration * sample_rate)
     out = np.zeros(total_samples)
 
@@ -201,9 +202,9 @@ def cricket_track(duration: int = 10, sample_rate: int = 44_100, gain: float = 1
 
     return song * gain
 
-# <----- Bird ----->
+# <----- Beetle ----->
 def beetle_track(duration: int = 10, sample_rate: int = 44_100, gain: float = 1.0) -> np.ndarray:
-    grain = biquad_bandpass(white_noise(duration), sample_rate, fc=2500, Q=2)
+    grain = biquad_bandpass(white_noise(duration), sample_rate, f_cutoff=2500, Q=2)
     env = attack_decay(len(grain), sample_rate, tau=0.008)
     grain = grain * env
     rasp  = pulse_train(grain, rate=18, duration=duration, jitter=0.3)
@@ -217,7 +218,7 @@ def woodpecker_track(duration: float = 10, clip_duration: float = 0.6,
     knock_dur = 0.03 # <--- again, still just const, it can be added as param if you like; note: keep it fast
 
     # create the knock from white noise and add biquad bandpass
-    knock = biquad_bandpass(white_noise(knock_dur, sample_rate), sample_rate, fc=1200, Q=12)
+    knock = biquad_bandpass(white_noise(knock_dur, sample_rate), sample_rate, f_cutoff=1200, Q=12)
 
     # i think it's more realistic if it has attack decay env
     env = attack_decay(len(knock), sample_rate, attack=0.0005, tau=0.01, peak=0.8)
@@ -284,9 +285,9 @@ def river_bed(duration: float, sample_rate: int =44_100, f_cutoff= 1200, Q: floa
 
 def ripple_grain(sample_rate: int = 44_100) -> np.ndarray:
     grain_dur = np.random.uniform(0.02, 0.05)
-    fc = np.random.uniform(1200, 4500)              # bright, varies ripple to ripple
+    f_cutoff = np.random.uniform(1200, 4500)              # bright, varies ripple to ripple
     Q = np.random.uniform(3, 8)
-    grain = biquad_bandpass(white_noise(grain_dur, sample_rate), sample_rate, fc=fc, Q=Q)
+    grain = biquad_bandpass(white_noise(grain_dur, sample_rate), sample_rate, f_cutoff, Q=Q)
     env = attack_decay(len(grain), sample_rate, attack=0.003, tau=grain_dur*0.5,
                         peak=np.random.uniform(0.12, 0.3))
     return grain * env
@@ -313,7 +314,7 @@ def river_track(total: float = 10.0, sample_rate: int = 44_100, density: float =
 # <----- Grass Rustle ----->
 def grass_bed(duration: float, sample_rate: int = 44_100) -> np.ndarray:
     noise = white_noise(duration, sample_rate)
-    bed = biquad_bandpass(noise, sample_rate, fc=2500, Q=1.2)   # bright, broad — papery, not woody
+    bed = biquad_bandpass(noise, sample_rate, f_cutoff=2500, Q=1.2)   # bright, broad — papery, not woody
 
     # sway amplitude — faster cycle than wind's slow gusts, grass moves quicker than air pressure builds
     mod = 0.5 + 0.5 * low_frequency_oscillator(duration, frequency=0.15, sample_rate=sample_rate)
@@ -321,8 +322,8 @@ def grass_bed(duration: float, sample_rate: int = 44_100) -> np.ndarray:
 
 def crinkle_grain(sample_rate: int = 44_100) -> np.ndarray:
     grain_dur = np.random.uniform(0.008, 0.02)       # short and dry — much shorter than a river ripple
-    fc = np.random.uniform(2500, 6000)               # bright/papery, higher than river's range
-    grain = biquad_bandpass(white_noise(grain_dur, sample_rate), sample_rate, fc=fc, Q=np.random.uniform(2,5))
+    f_cutoff = np.random.uniform(2500, 6000)               # bright/papery, higher than river's range
+    grain = biquad_bandpass(white_noise(grain_dur, sample_rate), sample_rate, f_cutoff, Q=np.random.uniform(2,5))
     env = attack_decay(len(grain), sample_rate, attack=0.001, tau=grain_dur*0.3, peak=np.random.uniform(0.05,0.15))
     return grain * env
 
@@ -353,7 +354,7 @@ def distant_call(sample_rate: int =44_100, freq: float =180, duration: float =1)
     t = n/sample_rate
     f = freq * (0.6)**(t/duration)                    # strong downward droop
     pure = np.sin(2*np.pi*np.cumsum(f)/sample_rate)
-    rasp = biquad_bandpass(white_noise(duration, sample_rate), sample_rate, fc=freq*1.3, Q=2)
+    rasp = biquad_bandpass(white_noise(duration, sample_rate), sample_rate, f_cutoff=freq*1.3, Q=2)
     call = 0.75*pure + 0.25*rasp
     env = attack_decay(len(call), sample_rate, attack=duration*0.15, tau=duration*0.4, peak=0.5)
     return call * env
@@ -371,18 +372,19 @@ def savannah_wildlife(duration: float = 10, sample_rate: int =44_100, density: f
 
 
 # <------  THUNDER STRIKEEE!!! YEAH ----->
-def thunder_strike_track(duration: float = 10, clip_duration:float =6.5, sample_rate: int = 44_100, onset = 0.6, gain: float = 1) -> np.ndarray:
-    pad = int(onset * sample_rate)
-    body_len = int((clip_duration - onset) * sample_rate)
+def thunder_strike_track(duration:float =7, sample_rate: int = 44_100, gain: float = 1) -> np.ndarray:
+    pad = np.zeros(int(np.random.uniform(0.5, 10.0) * sample_rate))
+    
+    body_len = int((duration) * sample_rate)
 
-    noise = white_noise(clip_duration - onset, sample_rate)
+    noise = white_noise(duration, sample_rate)
     env = bumpy_decay_envelope(body_len, sample_rate)
     shaped = noise * env
 
     filtered = time_varying_lowpass(shaped, sample_rate, fc_start=10000, fc_end=60)
 
-    track = np.zeros(int(duration * sample_rate))
-    track[pad:pad+len(filtered)] = filtered
+    track = np.concatenate([pad, filtered])
+
     return track * gain
 
 
@@ -391,12 +393,12 @@ def wind_track(duration: float = 10, gain: float = 1) -> np.ndarray:
     track = brown_noise(duration, gain=4)
     return tremolo_gain(track) * gain
 
-def thunder_storm(duration: float = 10) -> np.ndarray:
-    out = wind_track(duration)
-    out += white_noise(duration, gain=0.1)
-    out += thunder_strike_track(duration, gain=4)
-    out += grey_treefrog_track(duration)
-    return out
+# def thunder_storm(duration: float = 10) -> np.ndarray:
+#     out = wind_track(duration)
+#     out += white_noise(duration, gain=0.1)
+#     out += thunder_strike_track(duration, gain=4)
+#     out += grey_treefrog_track(duration)
+#     return out
 
 # def night_rain(duration: float = 10.0):
 #     wind = brown_noise(duration, gain=4)
@@ -424,7 +426,15 @@ def thunder_storm(duration: float = 10) -> np.ndarray:
 #     return grass + wildlife
 
 if __name__== "__main__":
-    out = thunder_storm()
-
+    # out = np.concatenate([savannah_grass(7), savannah_grass(7), savannah_grass(7)]) 
+    # out = np.concatenate([cricket_track(7), cricket_track(7)])
+    out = np.concatenate([river_track(7), river_track(7), river_track(7)])
+    # out = thunder_strike_track(np.random.uniform(0.5, 10.0))
+    # out = np.concatenate([savannah_wildlife(7), savannah_wildlife(7), savannah_wildlife(7)])
+    # out = np.concatenate([beetle_track(7), beetle_track(7), beetle_track(7)])
+    # out = np.concatenate([birds_track(7), birds_track(7), birds_track(7)]) -> false
+    # out = np.concatenate([woodpecker_track(7), woodpecker_track(7), woodpecker_track(7)]) -> false
+    # out = np.concatenate([grey_treefrog_track(7), grey_treefrog_track(7), grey_treefrog_track(7)]) -> false
     sd.play(out, 44_100)
     sd.wait()
+    pass
