@@ -4,12 +4,10 @@ import sounddevice as sd
 
 def one_pole_lowpass(sample: np.ndarray, sample_rate: int = 44_100, cutoff: float = 500) -> np.ndarray:
     alpha = 1 - np.exp(-2 * np.pi * cutoff / sample_rate)
-    y = np.zeros_like(sample)
-    prev = 0.0
+    out = np.zeros_like(sample)
     for n in range(len(sample)):
-        prev = prev + alpha * (sample[n] - prev)
-        y[n] = prev
-    return y
+        out[n] = out[n-1] + alpha * (sample[n] - out[n-1])
+    return out
 
 def cascaded_lowpass(sample: np.ndarray, sample_rate: int = 44_100, cutoff: float = 500, stages: int = 4) -> np.ndarray:
     out = sample
@@ -17,7 +15,7 @@ def cascaded_lowpass(sample: np.ndarray, sample_rate: int = 44_100, cutoff: floa
         out = one_pole_lowpass(out, sample_rate, cutoff)
     return out
 
-def low_frequency_oscillator(duration: float= 5, phase: float= 0.0, 
+def oscillator(duration: float= 5, phase: float= 0.0, 
                              frequency: float = 1, sample_rate: int = 44_100) -> np.ndarray:
     n = np.arange(int(duration * sample_rate))
     return np.sin(2 * np.pi * frequency * n / sample_rate + phase)
@@ -26,7 +24,7 @@ def tremolo_gain(sample: np.ndarray, sample_rate: float = 44_100, base_gain: flo
                  depth: float = 0.2, frequency: int = 1) -> np.ndarray:
     sample_len = len(sample)
     gain = np.zeros_like(sample)
-    lfo = low_frequency_oscillator(sample_len/sample_rate, frequency=frequency)
+    lfo = oscillator(sample_len/sample_rate, frequency=frequency)
     gain = base_gain * (1 + depth * lfo)
     
     return sample * gain
@@ -36,22 +34,6 @@ def white_noise(duration:float = 5.0, sample_rate: int = 44_100, gain: float = 1
     # well, literally just random unordered/abstract signal == noise
     noise = np.random.uniform(-1, 1, int(sample_rate * duration))
     return noise*gain
-
-# --- for wind like sounds --- #
-def brown_noise(duration: float = 5.0, sample_rate: int = 44_100,
-                gain: float = 3.2, leak: float = 0.02) -> np.ndarray:
-    previous_value = 0.0
-
-    w_noise = white_noise(duration, sample_rate)
-    r_noise = np.zeros_like(w_noise)
-
-    for n in range(len(w_noise)):
-        previous_value = (previous_value + leak * w_noise[n]) / (1 + leak)
-        r_noise[n] = previous_value
-    
-    r_noise = cascaded_lowpass(r_noise, sample_rate=44100, cutoff=400)
-    
-    return r_noise * gain
 
 def exp_sweep(f_start: float, f_end: float, duration: float, sample_rate: int = 44_100) -> np.ndarray:
     n = np.arange(int(duration * sample_rate))
@@ -65,10 +47,6 @@ def attack_decay(length: int, sample_rate: int, attack: float = 0.008, tau: floa
     t = n / sample_rate
     return np.where(t < attack, peak * (t / attack), peak * np.exp(-(t - attack) / tau))
 
-def sin_wave(freq: float = 440, duration: float = 5, sample_rate: int =44_100) -> np.ndarray:
-    n = np.arange(int(duration*sample_rate))
-    return np.sin(2*np.pi*freq*n/sample_rate)
-
 def biquad_bandpass(sample: np.ndarray, sample_rate: int = 44_100,
                     f_cutoff: float = 120, Q: float = 5.0) -> np.ndarray: # RBJ bandpass (constant skirt)
     omega = 2*np.pi*f_cutoff/sample_rate
@@ -77,34 +55,27 @@ def biquad_bandpass(sample: np.ndarray, sample_rate: int = 44_100,
 
     b0, b1, b2 = alpha, 0.0, -alpha
     a0, a1, a2 = 1+alpha, -2*cw, 1-alpha
-    b0,b1,b2,a1,a2 = b0/a0,b1/a0,b2/a0,a1/a0,a2/a0
+    b0, b1, b2, a1, a2 = b0/a0, b1/a0, b2/a0, a1/a0, a2/a0
 
     out = np.zeros_like(sample)
     x1=x2=y1=y2=0.0
 
     for n in range(len(sample)):
-        out[n]=b0*sample[n]+b1*x1+b2*x2-a1*y1-a2*y2
-        x2,x1=x1,sample[n]
-        y2,y1=y1,out[n]
+        out[n] = b0*sample[n]+b1*x1+b2*x2-a1*y1-a2*y2
+        x2, x1 =x1,sample[n]
+        y2, y1 = y1, out[n]
 
     return out
 
 def pulse_train(grain, rate, duration, sample_rate=44_100, jitter=0.0) -> np.ndarray:
-    out=np.zeros(int(duration*sample_rate))
-    step=sample_rate/rate; pos=0.0
+    out = np.zeros(int(duration*sample_rate))
+    step = sample_rate/rate
+    pos=0.0
     while int(pos)<len(out):
         p=int(pos); end=min(p+len(grain),len(out))
         out[p:end]+=grain[:end-p]
         pos+=step*(1+np.random.uniform(-jitter,jitter))
     return out
-
-def force_fadeout(x, sample_rate, fade_ms=15):
-    fade_len = int(fade_ms/1000 * sample_rate)
-    fade_len = min(fade_len, len(x))
-    fade = np.linspace(1.0, 0.0, fade_len)
-    x = x.copy()
-    x[-fade_len:] *= fade
-    return x
 
 
 def bumpy_decay_envelope(length, sample_rate, base_tau=2.5, n_bumps=4):
@@ -121,24 +92,24 @@ def bumpy_decay_envelope(length, sample_rate, base_tau=2.5, n_bumps=4):
     return env / np.max(env)     
 
 
-def time_varying_lowpass(x, sample_rate, fc_start=14000, fc_end=120, stages=4, gamma=0.4):
-    n = len(x)
+def time_varying_lowpass(sample, sample_rate, fc_start=14000, fc_end=120, stages=4, gamma=0.4):
+    n = len(sample)
     duration = n / sample_rate
     t = np.arange(n) / sample_rate
     
-    x_norm = t / duration
-    warped = x_norm ** gamma          # gamma < 1 pushes the curve forward — fast early, slow later
+    sample_norm = t / duration
+    warped = sample_norm ** gamma          # gamma < 1 pushes the curve forward — fast early, slow later
 
     fc = fc_start * (fc_end / fc_start) ** warped
 
     fc = fc_start * (fc_end / fc_start) ** (t / duration)        # smooth per-sample schedule
     alpha = 1 - np.exp(-2 * np.pi * fc / sample_rate)             # smooth per-sample alpha
 
-    y = np.zeros_like(x)
+    y = np.zeros_like(sample)
     prevs = [0.0] * stages
 
     for i in range(n):
-        val = x[i]
+        val = sample[i]
         a = alpha[i]
         for s in range(stages):
             prevs[s] = prevs[s] + a * (val - prevs[s])
@@ -148,7 +119,6 @@ def time_varying_lowpass(x, sample_rate, fc_start=14000, fc_end=120, stages=4, g
     return y
 
 # <----- Bird ----->
-
 def chirp_note(f_start: float, f_end: float, duration: float, sample_rate: int = 44_100, peak: float = 0.18) -> np.ndarray:
     tone = exp_sweep(f_start, f_end, duration, sample_rate)
     env = attack_decay(len(tone), sample_rate, peak=peak)
@@ -192,7 +162,7 @@ def cricket_track(duration: int = 10, sample_rate: int = 44_100, gain: float = 1
 
     # this is the main thing that make the cricket sound;
     # update it as you like if you think it's still not good enough, like yourself (JK ^_~)
-    grain = sin_wave(freq=4500, duration=grain_duration, sample_rate=sample_rate)
+    grain = oscillator(duration=grain_duration, frequency=4500, sample_rate=sample_rate)
     env = attack_decay(len(grain), sample_rate, attack=0.001, tau=0.004, peak=0.5)
     grain = grain * env
     song = pulse_train(grain, rate=30, duration=duration, jitter=0.05, sample_rate=sample_rate)
@@ -244,7 +214,7 @@ def frog_grain(sample_rate: int = 44_100) -> np.ndarray:
     grain_dur = 0.018
     n = int(grain_dur * sample_rate)
 
-    pure = sin_wave(2200, grain_dur, sample_rate)                          # tonal component
+    pure = oscillator(duration=grain_dur, frequency=2200, sample_rate=sample_rate)                          # tonal component
     noisy = biquad_bandpass(white_noise(grain_dur, sample_rate), sample_rate, f_cutoff=2200, Q=4)  # raspy component
 
     grain = 0.6 * pure + 0.4 * noisy                                   # blend: more tone than noise
@@ -280,7 +250,7 @@ def river_bed(duration: float, sample_rate: int =44_100, f_cutoff= 1200, Q: floa
     bed = biquad_bandpass(noise, sample_rate, f_cutoff=f_cutoff, Q=Q)   # low Q = broad, washy, not ringy
 
     # gentle flow-rate wobble — water volume drifting slightly, much faster/subtler than ocean swell
-    mod = 1 + 0.15 * low_frequency_oscillator(duration, frequency=0.3, sample_rate=sample_rate)
+    mod = 1 + 0.15 * oscillator(duration, frequency=0.3, sample_rate=sample_rate)
     return bed * mod * 0.4 # ← put const cause lazy adding another param
 
 def ripple_grain(sample_rate: int = 44_100) -> np.ndarray:
@@ -317,7 +287,7 @@ def grass_bed(duration: float, sample_rate: int = 44_100) -> np.ndarray:
     bed = biquad_bandpass(noise, sample_rate, f_cutoff=2500, Q=1.2)   # bright, broad — papery, not woody
 
     # sway amplitude — faster cycle than wind's slow gusts, grass moves quicker than air pressure builds
-    mod = 0.5 + 0.5 * low_frequency_oscillator(duration, frequency=0.15, sample_rate=sample_rate)
+    mod = 0.5 + 0.5 * oscillator(duration, frequency=0.15, sample_rate=sample_rate)
     return bed * mod * 0.3 # ← put const cause lazy adding another param
 
 def crinkle_grain(sample_rate: int = 44_100) -> np.ndarray:
@@ -345,8 +315,8 @@ def savannah_grass(duration: float = 10, sample_rate: int =44_100, wind_level: f
 # <------ wildlife call ------>;
 def cicada_drone(duration: float, sample_rate: int = 44_100, rate: int =22, f_cutoff: float = 3800) -> np.ndarray:
     noise = biquad_bandpass(white_noise(duration, sample_rate), sample_rate, f_cutoff, Q=8)
-    pulse = 0.5 + 0.5*low_frequency_oscillator(duration, frequency=rate, sample_rate=sample_rate)
-    drift = 0.15*low_frequency_oscillator(duration, frequency=0.2, sample_rate=sample_rate)
+    pulse = 0.5 + 0.5*oscillator(duration, frequency=rate, sample_rate=sample_rate)
+    drift = 0.15*oscillator(duration, frequency=0.2, sample_rate=sample_rate)
     return noise * (pulse + drift) * 0.25
 
 def distant_call(sample_rate: int =44_100, freq: float =180, duration: float =1) -> np.ndarray:
@@ -389,9 +359,19 @@ def thunder_strike_track(duration:float =7, sample_rate: int = 44_100, gain: flo
 
 
 # <------ WIND ------>
-def wind_track(duration: float = 10, gain: float = 1) -> np.ndarray:
-    track = brown_noise(duration, gain=4)
-    return tremolo_gain(track) * gain
+def wind_track(duration: float = 10, sample_rate: int = 44_100,
+                gain: float = 1, leak: float = 0.02) -> np.ndarray:
+
+    noise = white_noise(duration, sample_rate)
+    out = np.zeros_like(noise)
+
+    for n in range(len(noise)):
+        out[n] = (out[n-1] + leak * noise[n]) / (1 + leak)
+    
+    out = cascaded_lowpass(out, sample_rate=44100, cutoff=400)
+    
+    return tremolo_gain(out) * 3 * gain
+
 
 # def thunder_storm(duration: float = 10) -> np.ndarray:
 #     out = wind_track(duration)
@@ -428,13 +408,14 @@ def wind_track(duration: float = 10, gain: float = 1) -> np.ndarray:
 if __name__== "__main__":
     # out = np.concatenate([savannah_grass(7), savannah_grass(7), savannah_grass(7)]) 
     # out = np.concatenate([cricket_track(7), cricket_track(7)])
-    out = np.concatenate([river_track(7), river_track(7), river_track(7)])
+    # out = np.concatenate([river_track(7), river_track(7), river_track(7)])
     # out = thunder_strike_track(np.random.uniform(0.5, 10.0))
     # out = np.concatenate([savannah_wildlife(7), savannah_wildlife(7), savannah_wildlife(7)])
     # out = np.concatenate([beetle_track(7), beetle_track(7), beetle_track(7)])
     # out = np.concatenate([birds_track(7), birds_track(7), birds_track(7)]) -> false
     # out = np.concatenate([woodpecker_track(7), woodpecker_track(7), woodpecker_track(7)]) -> false
     # out = np.concatenate([grey_treefrog_track(7), grey_treefrog_track(7), grey_treefrog_track(7)]) -> false
+    out = thunder_strike_track()
     sd.play(out, 44_100)
     sd.wait()
     pass

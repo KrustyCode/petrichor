@@ -1,4 +1,3 @@
-import config
 import numpy as np
 from config import ORGANIC, QUEUE_DEPTH, SR
 import time
@@ -7,15 +6,14 @@ import threading
 
 class Sound:
     def __init__(self, name, kind, sr=SR):
-        self.name = name
-        self.kind = kind
+        self.name = name # <--- will be use as reference to the sound
+        self.kind = kind # <--- ORGANIC or STEADY
         self.sr = sr
  
         self.current = np.zeros(0, dtype=np.float32)   # buffer audio thread reads from
         self.index = 0                                  # read cursor into self.current
         self.level = 0.0                                # gain, 0..1
  
-        self.params = {}
         self.dirty = True                               # STEADY: "params changed, re-render"
         self._param_lock = threading.Lock()             # guards params/dirty (UI thread vs renderer thread)
  
@@ -29,10 +27,7 @@ class Sound:
         """
         Build and RETURN a float32 ndarray (roughly unit amplitude; gain is
         applied later via self.level). Runs on the renderer thread only --
-        never on the audio thread. Safe to be "slow" (a few ms) here.
- 
-        ORGANIC: randomize pitch/duration/gap each call.
-        STEADY : read self.params (take the lock briefly) and build from it.
+        never on the audio thread.
         """
         raise NotImplementedError
  
@@ -41,11 +36,14 @@ class Sound:
         while self._running:
             if self.kind == ORGANIC:
                 buf = self.render()
+                
                 assert buf is not None, f"{self.name}.render() returned None!"
+
                 try:
                     self.queue.put(buf, timeout=0.5)   # blocks if queue is full (backpressure)
                 except queue.Full:
                     pass  # consumer is behind; drop and try again next pass
+
             else:  # STEADY
                 with self._param_lock:
                     need_render = self.dirty
@@ -54,7 +52,9 @@ class Sound:
                     time.sleep(0.02)   # nothing changed -> idle, don't burn CPU
                     continue
                 buf = self.render()
+                
                 assert buf is not None, f"{self.name}.render() returned None!"
+                
                 # replace (don't accumulate) pending buffers for STEADY sounds
                 while not self.queue.empty():
                     try:
@@ -130,9 +130,3 @@ class Sound:
             out[filled:filled + take] += buf[self.index:self.index + take] * self.level
             self.index += take
             filled += take
- 
-    # -- called from the UI/control thread ---------------------------------
-    def set_params(self, **kw):
-        with self._param_lock:
-            self.params.update(kw)
-            self.dirty = True

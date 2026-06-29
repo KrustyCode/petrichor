@@ -9,7 +9,7 @@ Ambient soundscape engine — real-time, block-based mixer.
 
 Design
 ------
-Audio is produced in fixed blocks of BLOCK (1024) frames. sounddevice pulls
+Audio is produced in fixed blocks of BLOCK frames. sounddevice pulls
 one block per callback. We never stream a long file; instead every layer owns
 a short buffer that is read from (and refreshed) on the fly.
 
@@ -24,7 +24,7 @@ Each Sound owns:
                             re-render when a param changes (dirty flag).
 
 Two distinct indices — don't conflate them:
-    BLOCK (1024) = size of self.out, the output handed to sounddevice. Fixed.
+    BLOCK = size of self.out, the output handed to sounddevice. Fixed.
     self.index   = per-sound read cursor. Wraps mod len(container),
 
 Filling one output block may cross a container boundary (a sound can end
@@ -53,12 +53,6 @@ class Engine:
             s = self.sounds[name]
             s.level = float(level)
 
-    # def set_param(self, name, **params):
-    #     with self.lock:
-    #         s = self.sounds[name]
-    #         s.params.update(params)
-    #         s.dirty = True
-
     # called by sounddevice on the audio thread; must be fast & non-blocking
     def _callback(self, outdata, frames, time_info, status):
         if status:
@@ -70,16 +64,6 @@ class Engine:
             self.out *= self.master
             np.clip(self.out, -1.0, 1.0, out=self.out)  # avoid clipping/wrap
         outdata[:, 0] = self.out                        # mono -> (frames, ch)
-
-    # def start(self):
-    #     self.stream = sd.OutputStream(
-    #         samplerate=self.sr,
-    #         blocksize=self.block,
-    #         channels=config.CHANNELS,
-    #         dtype="float32",
-    #         callback=self._callback,
-    #     )
-    #     self.stream.start()
 
     def start(self):
         # 1) start every renderer thread so buffers start filling up NOW,

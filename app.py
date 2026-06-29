@@ -16,8 +16,6 @@ from PyQt6.QtWidgets import (
 # Param (layer) list, derived from the presets so they stay in sync.
 PARAMS = list(next(iter(PRESETS.values())).keys())
 
-
-
 # Palette
 
 BG       = "#0b1d26"
@@ -27,6 +25,8 @@ AMBER    = "#e8a33d"
 INK      = "#eef3f1"
 INK_DIM  = "#b9cdc9"
 
+
+# stylesheet for widgets and objects
 STYLESHEET = f"""
 QWidget {{
     background: {BG};
@@ -115,12 +115,12 @@ class SliderRow(QWidget):
         self.val.setText(str(v))
         self.valueChanged.emit(self.name, v / 100.0)
 
-    def set_value01(self, v01, block=False):
+    def set_value(self, value, block=False):
         """Set slider from a 0..1 value. block=True suppresses the signal."""
         if block:
             self.slider.blockSignals(True)
-        self.slider.setValue(int(round(v01 * 100)))
-        self.val.setText(str(int(round(v01 * 100))))
+        self.slider.setValue(int(round(value * 100)))
+        self.val.setText(str(int(round(value * 100))))
         if block:
             self.slider.blockSignals(False)
 
@@ -149,7 +149,7 @@ class SoundscapeWindow(QMainWindow):
         # --- header ---
         title = QLabel("Petrichor")
         title.setObjectName("Title")
-        sub = QLabel("A SMALL WEATHER, MADE OF SOUND")
+        sub = QLabel("AMBIENCE SOUNDS SYNTHESIZER")
         sub.setObjectName("Subtitle")
         outer.addWidget(title)
         outer.addWidget(sub)
@@ -191,7 +191,7 @@ class SoundscapeWindow(QMainWindow):
         sc.setSpacing(10)
         for name in PARAMS:
             row = SliderRow(name)
-            row.valueChanged.connect(self.on_param_changed)
+            row.valueChanged.connect(self.on_level_changed)
             self.rows[name] = row
             sc.addWidget(row)
 
@@ -218,9 +218,9 @@ class SoundscapeWindow(QMainWindow):
                 self.engine.pause()
 
 
-    def on_param_changed(self, name, v01):
+    def on_level_changed(self, name, value):
         if self.engine:
-            self.engine.set_level(name, v01)
+            self.engine.set_level(name, value)
 
     def apply_preset(self, name):
         preset = PRESETS[name]
@@ -232,11 +232,10 @@ class SoundscapeWindow(QMainWindow):
             btn.style().polish(btn)
 
         # move every slider to the preset value.
-        # block=False lets each move emit valueChanged -> on_param_changed,
-        # which forwards to the engine. So setting the sliders IS the engine
-        # update; you don't need a second loop.
+        # block=False lets each move emit valueChanged -> on_level_changed,
+        # which forwards to the engine. So setting the sliders IS the engine update
         for param in PARAMS:
-            self.rows[param].set_value01(preset.get(param, 0.0), block=False)
+            self.rows[param].set_value(preset.get(param, 0.0), block=False)
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -260,5 +259,6 @@ if __name__ == "__main__":
     engine.add_sound(s.River())
 
     win = SoundscapeWindow(engine=engine)
+    win.apply_preset("savannah")
     win.show()
     sys.exit(app.exec())

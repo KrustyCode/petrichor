@@ -19,5 +19,5 @@ PRESETS = {
     "storm_rolling_in":    {"rain":0.3, "wind":0.6, "bird":0,   "cricket":0,   "beetle":0,   "frog":0,   "woodpecker":0,   "savannah grass":0.2, "cicada":0.2, "distant call":0.3, "thunder strike":0.2, "river": 0},
     "african_plains_night":{"rain":0,   "wind":0.5, "bird":0,   "cricket":0.5, "beetle":0,   "frog":0,   "woodpecker":0,   "savannah grass":0.6, "cicada":0,   "distant call":0.6, "thunder strike":0, "river": 0},
     "pond_at_dusk":        {"rain":0,   "wind":0.2, "bird":0.2, "cricket":0.5, "beetle":0,   "frog":0.7, "woodpecker":0,   "savannah grass":0,   "cicada":0.1, "distant call":0,   "thunder strike":0, "river": 0.3},
-    "riverside":           {"rain":0,   "wind":0.3, "bird":0.4, "cricket":0.2, "beetle":0.4, "frog":0.2,   "woodpecker":0.2, "savannah grass":0,   "cicada":0.2, "distant call":0,   "thunder strike":0, "river": 0.8},
+    "riverside":           {"rain":0,   "wind":0.3, "bird":0.4, "cricket":0.2, "beetle":0.4, "frog":0.2, "woodpecker":0.2, "savannah grass":0,   "cicada":0.2, "distant call":0,   "thunder strike":0, "river": 0.8},
 }
