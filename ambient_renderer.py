@@ -70,11 +70,12 @@ def biquad_bandpass(sample: np.ndarray, sample_rate: int = 44_100,
 def pulse_train(grain, rate, duration, sample_rate=44_100, jitter=0.0) -> np.ndarray:
     out = np.zeros(int(duration*sample_rate))
     step = sample_rate/rate
-    pos=0.0
-    while int(pos)<len(out):
-        p=int(pos); end=min(p+len(grain),len(out))
-        out[p:end]+=grain[:end-p]
-        pos+=step*(1+np.random.uniform(-jitter,jitter))
+    pos = 0
+    while int(pos) < len(out):
+        p = int(pos)
+        end=min(p + len(grain), len(out))
+        out[p:end] += grain[:end-p]
+        pos += step * (1 + np.random.uniform(-jitter,jitter))
     return out
 
 
@@ -414,8 +415,9 @@ if __name__== "__main__":
     # out = np.concatenate([beetle_track(7), beetle_track(7), beetle_track(7)])
     # out = np.concatenate([birds_track(7), birds_track(7), birds_track(7)]) -> false
     # out = np.concatenate([woodpecker_track(7), woodpecker_track(7), woodpecker_track(7)]) -> false
-    # out = np.concatenate([grey_treefrog_track(7), grey_treefrog_track(7), grey_treefrog_track(7)]) -> false
-    out = thunder_strike_track()
+    # out = np.concatenate([grey_treefrog_track(7), grey_treefrog_track(7), grey_treefrog_track(7)])
+    out = np.concatenate([frog_grain(), frog_grain(), frog_grain(), frog_grain(), frog_grain(), frog_grain(), frog_grain(), frog_grain()])
+    # out = thunder_strike_track()
     sd.play(out, 44_100)
     sd.wait()
     pass
